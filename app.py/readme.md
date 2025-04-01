@@ -1,67 +1,56 @@
+import asyncio
 import streamlit as st
-import sys
 import os
-
-# Add the utils folder to the Python path
-sys.path.append(os.path.join(os.path.dirname(__file__), 'utils'))
 import pandas as pd
-from utils.helper import call_llama
+from together import Together
+from helper import *
 
 st.set_page_config(layout="wide")
+st.title("Duel Agent Simulation 🦙🦙")
 
-# Custom Title Centering
-st.markdown("<h1 style='text-align: center; font-size: 40px; color: #fff;'>Duel Agent Simulation 🦙🦙</h1>", unsafe_allow_html=True)
-
-# Sidebar with instruction manual
 with st.sidebar:
     with st.expander("Instruction Manual"):
         st.markdown("""
             # 🦙🦙 Duel Agent Simulation Streamlit App
+
             ## Overview
-            Welcome to the **Duel Agent Simulation** app! This Streamlit application allows you to chat with Meta's Llama3 model in a unique interview simulation.
+
+            Welcome to the **Duel Agent Simulation** app! This Streamlit application allows you to chat with Meta's Llama3 model in a unique interview simulation. The app features two agents in an interview scenario, with a judge providing feedback. The best part? You simply provide a topic, and the simulation runs itself!
+
             ## Features
-            - Input a topic and start the simulation.
-            - View previous conversations and feedback.
+
+            ### 📝 Instruction Manual
+
+            **Meta Llama3 🦙 Chatbot**
+
+            This application lets you interact with Meta's Llama3 model through a fun interview-style chat.
+
+            **How to Use:**
+            1. **Input:** Type a topic into the input box labeled "Enter a topic".
+            2. **Submit:** Press the "Submit" button to start the simulation.
+            3. **Chat History:** View the previous conversations as the simulation unfolds.
+
+            **Credits:**
+            - **Developer:** Kethan Dosapati 
+               - [LinkedIn](https://www.linkedin.com/in/kethan-dosapati/)  
         """)
 
-    # Text input and buttons with styling
-    user_topic = st.text_input("Enter a topic", "Data Science", key="topic_input")
-    submit_button = st.button("Run Simulation!", key="submit_button")
-    clear_button = st.button("Clear Session", key="clear_button")
+    # Text input
+    user_topic = st.text_input("Enter a topic", "Data Science")
 
-# Custom styling for buttons
-st.markdown("""
-    <style>
-    .stButton>button {
-        width: 100%;
-        height: 50px;
-        background-color: #FF5B5B;
-        color: white;
-        border: none;
-        border-radius: 5px;
-        font-size: 18px;
-        font-weight: bold;
-    }
-    .stTextInput>div>div>input {
-        background-color: #1e1e1e;
-        color: white;
-        border: 1px solid #444;
-        border-radius: 5px;
-        font-size: 18px;
-        padding: 10px;
-    }
-    .stExpanderHeader {
-        font-weight: bold;
-        color: #FF5B5B;
-    }
-    </style>
-""", unsafe_allow_html=True)
+    # Add a button to submit
+    submit_button = st.button("Run Simulation!")
+
+    # Add a button to clear the session state
+    if st.button("Clear Session"):
+        st.session_state.messages = []
+        st.experimental_rerun()
 
 # Initialize chat history
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Display chat history
+# Display chat messages from history on app rerun
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
@@ -71,47 +60,69 @@ interviewer = call_llama
 interviewee = call_llama
 judge = call_llama
 
+# React to user input
 iter = 0
 list_of_iters = []
 list_of_questions = []
 list_of_answers = []
 list_of_judge_comments = []
 list_of_passes = []
-
 if submit_button:
+
+    # Initiatization
     prompt = f"Ask a question about this topic: {user_topic}"
 
+    # Display user message in chat message container
+    # Default: user=interviewee, assistant=interviewer
     st.chat_message("user").markdown(prompt)
     st.session_state.messages.append({"role": "user", "content": prompt})
 
     while True:
+
+        # Interview asks a question
         question = interviewer(prompt)
+
+        # Display assistant response in chat message container
         st.chat_message("assistant").markdown(question)
         st.session_state.messages.append({"role": "assistant", "content": question})
 
+        # Interviewee attempts an answer
         if iter < 5:
-            answer = interviewee(f"Answer the question: {question} in a mediocre way because you are an inexperienced interviewee.")
+            answer = interviewee(
+                f"""
+                    Answer the question: {question} in a mediocre way
+                    Because you are an inexperienced interviewee.
+                """
+            )
+            st.chat_message("user").markdown(answer)
+            st.session_state.messages.append({"role": "user", "content": answer})
         else:
-            answer = interviewee(f"Answer the question: {question} in a mediocre way because you want to improve, using the judge's comments: {judge_comments}")
+            answer = interviewee(
+                f"""
+                    Answer the question: {question} in a mediocre way
+                    Because you are an inexperienced interviewee but you really want to learn,
+                    so you learn from the judge comments: {judge_comments}
+                """
+            )
+            st.chat_message("user").markdown(answer)
+            st.session_state.messages.append({"role": "user", "content": answer})
 
-        st.chat_message("user").markdown(answer)
-        st.session_state.messages.append({"role": "user", "content": answer})
+        # Judge thinks and advises but the thoughts are hidden
+        judge_comments = judge(
+            f"""
+                The question is: {question}
+                The answer is: {answer}
+                Provide feedback and rate the answer from 1 to 10 while 10 being the best and 1 is the worst. 
+            """
+        )
 
-        # Get judge comments
-        judge_comments = judge(f"The question is: {question}\nThe answer is: {answer}\nProvide feedback and rate the answer from 1 to 10.")
-
-        # Ensure judge_comments is not None and is treated as a string
-        judge_comments = str(judge_comments) if judge_comments is not None else ""
-
-        # Check if '8' is in judge_comments (now safe to check)
+        # Collect all responses
         passed_or_not = 1 if '8' in judge_comments else 0
-
         list_of_iters.append(iter)
         list_of_questions.append(question)
         list_of_answers.append(answer)
         list_of_judge_comments.append(judge_comments)
         list_of_passes.append(passed_or_not)
-
         results_tab = pd.DataFrame({
             "Iter.": list_of_iters,
             "Questions": list_of_questions,
@@ -123,12 +134,9 @@ if submit_button:
         with st.expander("See explanation"):
             st.table(results_tab)
 
+        # Stopping rule
         if '8' in judge_comments:
             break
 
+        # Checkpoint
         iter += 1
-
-# Handle the clear session functionality
-if clear_button:
-    st.session_state.messages = []
-    st.experimental_rerun()
